@@ -1,0 +1,445 @@
+---
+title: 'Análise de Sentimentos com Text Mining - Lula'
+author: "Leandro Pereira"
+date: "08/03/2019"
+#output:
+  #html_document: default
+  #html_notebook: default
+  #word_document: default
+---
+```{r}
+# Limpando o console.
+cat("\014") 
+#Limpando o Global Environment.
+rm(list = ls())
+```
+#Instalando os Pacotes Necessários:
+```{r}
+#install.packages("twitteR")
+#install.packages("tidyverse")
+#install.packages("data.table")
+#install.packages("tidytext")
+#install.packages("glue")
+#install.packages("stringr")
+#install.packages("stringi")
+#install.packages("rvest")
+#install.packages("readr")
+#install.packages("ptstem")
+#install.packages("wordcloud2")
+#install.packages("tm")
+#install.packages("RColorBrewer")
+#install.packages("igraph")
+#install.packages("quanteda")
+#install.packages("wordcloud")
+#install.packages("tm")
+```
+#Carregando as Bibliotecas Necessárias:
+```{r}
+library(twitteR)
+library(tidyverse)
+library(data.table)
+library(tidytext)
+library(glue)
+library(stringr)
+library(stringi)
+library(rvest)
+library(readr)
+library(ptstem)
+library(wordcloud2)
+library(RColorBrewer)
+library(igraph)
+library(tm)
+library(quanteda)
+library(wordcloud)
+```
+#Cria a lista de stopwords
+```{r}
+stopwords <- c("a",	"ainda",	"alem",	"ambas",	"ambos",	"antes",	"ao",	"aonde",	"aos",	"apos",	"aquele",	"aqueles",	"as",	"assim",	"com",	"como",	"contra",	"contudo",	"cuja",	"cujas",	"cujo",	"cujos",	"da",	"das",	"de",	"dela",	"dele",	"deles",	"demais",	"depois",	"desde",	"desta",	"deste",	"dispoe",	"dispoem",	"diversa",	"diversas",	"diversos",	"do",	"dos",	"durante",	"e",	"ela",	"elas",	"ele",	"eles",	"em",	"entao",	"entre",	"essa",	"esse",	"esses",	"esta",	"estas",	"este",	"estes",	"ha",	"isso",	"isto",	"logo",	"mais",	"mas",	"mediante",	"menos",	"mesma",	"mesmas",	"mesmo",	"mesmos",	"na",	"nas",	"nao",	"nas",	"nem",	"nesse",	"neste",	"nos",	"o",	"os",	"ou",	"outra",	"outras",	"outro",	"outros",	"pelas",	"pelas",	"pelo",	"pelos",	"perante",	"pois",	"por",	"porque",	"portanto",	"proprio",	"propios",	"quais",	"qual",	"qualquer",	"quando",	"quanto",	"quem",	"quer",	"se",	"seja",	"sem",	"sendo",	"seu",	"seus",	"sob",	"sobre",	"sua",	"suas",	"tal",	"tambem",	"teu",	"teus",	"toda",	"todas",	"todo",	"todos",	"tua",	"tuas",	"tudo",	"um",	"uma",	"umas",	"uns",	"essas",	"que")
+```
+#Tratando os dados para transformar em um dicionário
+```{r}
+sw <- unlist(str_split(stopwords,'\\n')) 
+glimpse(sw)
+```
+#Enriquecendo a stopword com a biblioteca TM: 
+```{r}
+library(tm)
+#Carrega as stopwords da TM
+swList2 <- stopwords('portuguese')
+glimpse(swList2)
+```
+#Fazendo um merge nos dados (StopWords + TM)
+```{r}
+str(sw)
+sw_merged <- union(sw,swList2) 
+summary(sw_merged)
+```
+#Analise de duplicidade de stopwords
+```{r}
+tibble(word = sw_merged) %>% 
+  group_by(word) %>% 
+  filter(n()>1)
+```
+#Carregando os termos de polaridade em uma tabela geral para o uso posterior de análise de Sentimentos :
+```{r}
+#adjetivos negativos:
+an <- read.csv("adjetivos_negativos.txt", header = F, sep = "\t", strip.white = F,
+                     stringsAsFactors = F, encoding="UTF-8")
+#Expressoes Negativas:
+exn <- read.csv("expressoes_negativas.txt", header = F, sep = "\t", strip.white = F,
+              stringsAsFactors = F, encoding="UTF-8")
+#Verbos Negativos:
+vn <- read.csv("verbos_negativos.txt", header = F, sep = "\t", strip.white = F, 
+               stringsAsFactors = F, encoding="UTF-8")
+#Substantivos Negativos:
+subn <- read.csv("substantivos_negativos.txt", header = F, sep = "\t", strip.white = F, 
+                 stringsAsFactors = F, encoding="UTF-8")
+#Adjetivos Positivos:
+ap <- read.csv("adjetivos_positivos.txt", header = F, sep = "\t", strip.white = F, 
+               stringsAsFactors = F, encoding="UTF-8")
+#Expressoes Positivas:
+exp <- read.csv("expressoes_positivas.txt", header = F, sep = "\t", strip.white = F, 
+               stringsAsFactors = F, encoding="UTF-8")
+#Verbos Positivos:
+vp <- read.csv("verbos_positivos.txt", header = F, sep = "\t", strip.white = F, 
+         stringsAsFactors = F, encoding="UTF-8") 
+#Substantivos Positivos
+sp <- read.csv("substantivos_positivos.txt", header = F, sep = "\t", strip.white = F, 
+         stringsAsFactors = F, encoding="UTF-8")
+#Checagem:
+str(an);str(exn);str(vn);str(subn);str(ap);str(exp);str(vp);str(sp)
+```
+#Criando um dataframe de Polaridades para classificar os positivos e negativos:
+```{r}
+dfPolaridades <- an %>% 
+                  mutate(word = V1 , polaridade = -1, tipo="adjetivo", sentimento="negativo") %>%
+                  select(word,polaridade,tipo,sentimento) %>%
+                  arrange(word)
+head(dfPolaridades,2)
+```
+#Contagem para adicionar os dados corretamente
+```{r}
+#count para poder adicionar os dados corretamente
+icount <-  length(exn$V1)
+dfPolaridades <- bind_rows(dfPolaridades,list(word = exn$V1, polaridade=rep(-1,icount),tipo=rep('expressao',icount),sentimento=rep('negativo',icount)))
+dfPolaridades %>% arrange(desc(word)) %>% head(3)
+```
+#Carregando os dados para o Data Frame:
+```{r}
+icount <-  length(vn$V1)
+dfPolaridades <- bind_rows(dfPolaridades,list(word = vn$V1, polaridade=rep(-1,icount),tipo=rep('verbo',icount),sentimento=rep('negativo',icount)))
+
+icount <-  length(subn$V1)
+dfPolaridades <- bind_rows(dfPolaridades,list(word = subn$V1, polaridade=rep(-1,icount),tipo=rep('substantivo',icount),sentimento=rep('negativo',icount)))
+
+icount <-  length(ap$V1)
+dfPolaridades <- bind_rows(dfPolaridades,list(word = ap$V1, polaridade=rep(1,icount),tipo=rep('adjetivo',icount),sentimento=rep('positivo',icount)))
+
+icount <-  length(exp$V1)
+dfPolaridades <- bind_rows(dfPolaridades,list(word = exp$V1, polaridade=rep(1,icount),tipo=rep('expressao',icount),sentimento=rep('positivo',icount)))
+
+icount <-  length(vp$V1)
+dfPolaridades <- bind_rows(dfPolaridades,list(word = vp$V1, polaridade=rep(1,icount),tipo=rep('verbo',icount),sentimento=rep('positivo',icount)))
+
+icount <-  length(sp$V1)
+dfPolaridades <- bind_rows(dfPolaridades,list(word = sp$V1, polaridade=rep(1,icount),tipo=rep('substantivo',icount),sentimento=rep('positivo',icount)))
+
+#visualizando o dataframe
+dfPolaridades %>% group_by(word) %>% filter(n() == 1) %>% summarize(n=n())
+```
+#Remover duplicidades do data frame:
+```{r}
+dfPolaridades %>% count()
+```
+#Removendo termos de sentimentos repetidos
+```{r}
+dfPolaridadesUnique <- dfPolaridades[!duplicated(dfPolaridades$word),]
+dfPolaridadesUnique %>% count()
+```
+#Twitter
+#Conectando, autorizando e recuperando tweets:
+```{r}
+#Chaves:
+    api_key             <- "rD3TIOW86HUbIKAATsc2WphaW"
+    api_secret          <- "VVXuNGHewI2T1Ls7zhBPhsWRfz6Fg5Y7P1dnjRXUEvVfqLnsbu"
+    access_token        <- "1149318876766908417-M1Yvcbho9jE4dnRuE8UEwb5udAjxkw"
+    access_token_secret <- "Pp8cQfjXi2wJTDVAFfzJlXuxpopo2U8QvofKRRlCe6OCC"
+
+#Conectando
+    setup_twitter_oauth(api_key, api_secret, access_token, access_token_secret);
+
+#Marcas a serem pesquisadas:
+  twitter_tag <- "lula|#lula|#Lulalivre";
+
+#Busca os Tweets (Uma base para cada marca)
+  tweets <- searchTwitter(twitter_tag, lang = 'pt', resultType="mixed", n=5000, locale = "brazil");
+  tweetxt <- sapply(tweets, function(x) x$getText());
+  tibble(tweetxt)
+```
+#Limpeza dos Tweets:
+```{r}
+removeURL <- function(x) gsub("http[^[:space:]]*", "", x)
+  tweetxtUtf <- readr::parse_character(tweetxt, locale = readr::locale('pt'))
+  tweetxtUtf <- sapply(tweetxtUtf, function(x) stri_trans_tolower(x,'pt'))
+  tweetxtUtf <- gsub("(RT|via)((?:\\b\\W*@\\w+)+)", " ",  tweetxtUtf);
+  tweetxtUtf <- str_replace(tweetxtUtf,"RT @[a-z,A-Z]*: ","")
+  tweetxtUtf <- gsub("@\\w+", "", tweetxtUtf)
+  tweetxtUtf <- removeURL(tweetxtUtf)
+  tweetxtUtf <- str_replace_all(tweetxtUtf,"@[a-z,A-Z]*","")  
+  tweetxtUtf <- gsub("[^[:alnum:][:blank:]]", " ", tweetxtUtf)
+  tweetxtUtf <- gsub("[[:digit:]]", "", tweetxtUtf)
+  tweetxtUtfUnique <- tweetxtUtf %>% unique() 
+  tibble(tweetxtUtfUnique) 
+```
+#Criando o corpus:
+```{r}
+  tweetencoded <- sapply(tweetxtUtfUnique,enc2native)
+  df <- data.frame(text=tweetencoded)
+  head(df)
+```
+#Criando um id para o documento:
+```{r}
+  df$doc_id <- row.names(df)
+  head(df)
+  tm_corpus <- Corpus(DataframeSource(df))
+  inspect(tm_corpus[1:4])
+```
+#Criando o dtm usando palavras que tem mais de 3 letras e uma frequencia >19:
+```{r}
+dtm <- DocumentTermMatrix(tm_corpus, control=list(wordLengths=c(4, 20),language=locale('pt'), stopwords=stopwords('portuguese'),
+                                                   bounds = list(global = c(30,500))))
+dtm
+```
+#Termos mais frequentes:
+```{r}
+findFreqTerms(dtm)
+```
+#Vizualiza os termos em uma matrix de relacao:
+```{r}
+  ttm_results <- t(as.matrix(dtm)) %*% as.matrix(dtm)
+  head(ttm_results)
+```
+#Vizualiza os termos e suas correlações em um Grafico:
+```{r}
+library(igraph)
+
+  g <- graph.adjacency(ttm_results, weighted=T, mode = 'undirected')
+  g <- simplify(g)
+  set.seed(2019)
+  layout1 <- layout_on_sphere(g)
+  
+  #construindo um grafico da matriz acima
+  V(g)$label.cex <- 2.2 * V(g)$degree / max(V(g)$degree)+ .2
+  V(g)$label.color <- rgb(0, 0, .2, .8)
+  V(g)$frame.color <- NA
+  egam <- (log(E(g)$weight)+.4) / max(log(E(g)$weight)+.4)
+  E(g)$color <- rgb(.5, .5, 0, egam)
+  E(g)$width <- egam
+  plot(g, layout=layout1, main = "Lula - Rede")
+```
+#Análise gráfica da frequencia dos NOMES nos tweets:
+```{r}
+library(quanteda)
+
+  #falar quer país presidente moro deve bolsonaro jato lava governo caso sobre todos transposição livre
+  #babaca preso brasil contra prisão lulalivre pode cara causa educação freire honoris ministro paulo título
+  #cadeia enjaulado água tudo agora dilma
+
+  twdf <- tibble(tweet = tweetxtUtfUnique)
+  twdf$whois <- NA
+  twdf$whois[twdf$tweet %like% 'falar'] <- 'falar'
+  twdf$whois[twdf$tweet %like% 'quer'] <- 'quer'
+  twdf$whois[twdf$tweet %like% 'país'] <- 'país'
+  twdf$whois[twdf$tweet %like% 'presidente'] <- 'presidente'
+  twdf$whois[twdf$tweet %like% 'moro'] <- 'moro'
+  twdf$whois[twdf$tweet %like% 'bolsonaro'] <- 'bolsonaro'
+  twdf$whois[twdf$tweet %like% 'jato'] <- 'jato'
+  twdf$whois[twdf$tweet %like% 'lava'] <- 'lava'
+  twdf$whois[twdf$tweet %like% 'governo'] <- 'governo'
+  twdf$whois[twdf$tweet %like% 'caso'] <- 'caso'
+  twdf$whois[twdf$tweet %like% 'sobre'] <- 'sobre'
+  twdf$whois[twdf$tweet %like% 'deve'] <- 'deve'
+  twdf$whois[twdf$tweet %like% 'todos'] <- 'todos'
+  twdf$whois[twdf$tweet %like% 'transposição'] <- 'transposição'
+  twdf$whois[twdf$tweet %like% 'livre'] <- 'livre'
+  twdf$whois[twdf$tweet %like% 'babaca'] <- 'babaca'
+  twdf$whois[twdf$tweet %like% 'preso'] <- 'preso'
+  twdf$whois[twdf$tweet %like% 'brasil'] <- 'brasil'
+  twdf$whois[twdf$tweet %like% 'contra'] <- 'contra'
+  twdf$whois[twdf$tweet %like% 'prisão'] <- 'prisão'
+  twdf$whois[twdf$tweet %like% 'lulalivre'] <- 'lulalivre'
+  twdf$whois[twdf$tweet %like% 'pode'] <- 'pode'
+  twdf$whois[twdf$tweet %like% 'cara'] <- 'cara'
+  twdf$whois[twdf$tweet %like% 'causa'] <- 'causa'
+  twdf$whois[twdf$tweet %like% 'educação'] <- 'educação'
+  twdf$whois[twdf$tweet %like% 'freire'] <- 'freire'
+  twdf$whois[twdf$tweet %like% 'honoris'] <- 'honoris'
+  twdf$whois[twdf$tweet %like% 'ministro'] <- 'ministro'
+  twdf$whois[twdf$tweet %like% 'paulo'] <- 'paulo'
+  twdf$whois[twdf$tweet %like% 'título'] <- 'título'
+  twdf$whois[twdf$tweet %like% 'cadeia'] <- 'cadeia'
+  twdf$whois[twdf$tweet %like% 'enjaulado'] <- 'enjaulado'
+  twdf$whois[twdf$tweet %like% 'água'] <- 'água'
+  twdf$whois[twdf$tweet %like% 'tudo'] <- 'tudo'
+  twdf$whois[twdf$tweet %like% 'agora'] <- 'agora'
+  twdf$whois[twdf$tweet %like% 'dilma'] <- 'dilma'
+  
+  freq <- twdf %>% count(whois, sort = T) %>% select( whois,freq = n) 
+  freq
+  pie(table(twdf$whois), main = "lula1")
+  barplot(table(twdf$whois), main = "lula2")
+  distMatrix <- as.matrix(dist(freq$freq))
+  plot(density(distMatrix), main = "lula3")
+```
+#Preparação para a Análise de Sentimentos:
+#Criando o dtm:
+```{r}
+  dfq <- data.frame(id=row.names(twdf),
+                    text=twdf$tweet, whois = factor(twdf$whois))
+  myCorpus <- corpus(twdf,  text_field = 'tweet', 
+                     metacorpus = list(source = "tweets")) 
+  myCorpus
+```
+#Verificando a legibilidade dos textos
+```{r}
+  head(textstat_readability(myCorpus),2)
+  summary(myCorpus,6)
+```
+#Fazendo o stem e stopwords:
+```{r}
+stopwors2 <- c('the','r','é','c','?','!','of','rt','pra')
+
+  myDfm <- dfm(myCorpus, groups='whois', remove = c(quanteda::stopwords("portuguese"),stopwors2,tm::stopwords('portuguese')), 
+                   stem = F, remove_punct = TRUE)
+  myDfm
+  topfeatures(myDfm, 50)
+```
+#Vizualiza a Nuvem de Palavras:
+```{r}
+set.seed(2019)
+
+textplot_wordcloud(myDfm, min.freq = 15, random.order = FALSE,
+                   rot.per = .6,
+                   colors = RColorBrewer::brewer.pal(8,"Dark2"))
+```
+#Frequencias de Texto:
+```{r}
+  allfeats <- textstat_frequency(myDfm)
+  allfeats$feature <- with(allfeats, reorder(feature, -frequency))
+  ggplot(head(allfeats,20), aes(x=feature, y=frequency, fill=frequency)) + geom_bar(stat="identity") +
+  xlab("Termos") + ylab("Frequência") + coord_flip() +
+  theme(axis.text=element_text(size=7))
+```
+#Expressoes mais frequentes:
+```{r}
+  col <- textstat_collocations(myCorpus, size = 2:4, min_count = 2)
+  head(col)
+  ggplot(col[order(col$count, decreasing = T),][1:25,], 
+         aes(x=reorder(collocation,count), y=factor(count), fill=factor(count))) + geom_bar(stat="identity") +
+  xlab("Expressões") + ylab("Frequência")  + coord_flip() +
+  theme(axis.text=element_text(size=7))
+```
+#Calculando a diversidade complexidade dos textos:
+```{r}
+textstat_lexdiv(myDfm, "all",drop=T) %>% arrange(desc(U))
+```
+#Exibindo o score de termos:
+```{r}
+  twraw <- readr::parse_character(tweetxt, locale = readr::locale('pt')) 
+  mytoken<- tokens(twraw, 
+                    remove_numbers=T,remove_symbols=T, 
+                    remove_twitter=T, remove_url=T)
+  head(mytoken)
+  mytoken<- tokens_remove(mytoken, stopwords('portuguese'))
+  head(textstat_collocations(mytoken,size = 5, min_count = 5))
+```
+##Analise de sentimentos:
+```{r}
+  twdf$id<- rownames(twdf)
+  tw <- twdf %>% mutate(document = id,word=tweet) %>% select(document,word,whois)
+  
+  #note que a coluna document carrega a identificação de cada texto
+  str(tw)
+  tdm<- tw %>% unnest_tokens(word,word)
+  
+  #Removendo as stopwords
+  tdm<- tdm %>% anti_join(data.frame(word= stopwords('portuguese')))
+  tdm <- tdm %>% anti_join(data.frame(word= stopwors2))
+  head(tdm)
+```
+#Primeiras impressões: 
+```{r}
+library(tidyr)
+
+sentJoin <- tdm %>%
+              inner_join(dfPolaridadesUnique, by='word')
+
+sentJoin %>%
+  count(sentimento) %>%
+  ggplot(aes(sentimento,n , fill = sentimento)) +
+  geom_bar(stat = "identity", show.legend = FALSE)
+
+```
+```{r}
+sentJoin %>%
+  count(whois, index = document, sentimento) %>%
+  spread(sentimento, n, fill = 0) %>%
+  mutate(score = positivo - negativo) %>%
+  ggplot(aes(index, score, fill = whois)) +
+  geom_bar(stat = "identity", show.legend = FALSE) +
+  facet_wrap(~whois, ncol = 15, scales = "free_x")
+```
+```{r}
+scored <- sentJoin %>%
+        count(whois,sentimento) %>%
+        spread(sentimento, n, fill = 0) %>%
+        mutate(score = positivo -negativo) %>%
+        mutate(scoreperc = (positivo / (positivo + negativo)) * 100)
+  ggplot(scored, aes(whois,scoreperc , fill = whois)) +
+  geom_bar(stat = "identity", show.legend = T)
+```
+#Top Sentimentos
+```{r}
+word_counts <- sentJoin %>%
+            count(word, sentimento, sort = TRUE) %>%
+            ungroup()
+
+word_counts %>%
+  filter(n > 1) %>%
+  mutate(n = ifelse(sentimento == "negativo", -n, n)) %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(word, n, fill = sentimento)) +
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  ylab("Contribution to sentiment")
+```
+#Nuvem de Sentimentos:
+```{r}
+library(reshape2)
+library(wordcloud)
+
+sentJoin %>%
+count(word, sentimento, sort = TRUE) %>%
+  acast(word ~ sentimento, value.var = "n", fill = 0) %>%
+  comparison.cloud(colors = c("#F8766D", "#00BFC4"),
+                  max.words = 60)
+```
+#Sentimentos mais negativos:
+```{r}
+#
+bottom20tw <- head(sentJoin %>%
+            count(document, sentimento) %>%
+            spread(sentimento, n, fill = 0) %>%
+            mutate(score = positivo - negativo) %>%
+            arrange(score),20)['document']
+twdf %>% filter(id %in% as.vector(bottom20tw$document))
+```
+#Sentimentos mais Positivos: 
+```{r}
+top20 <- head(sentJoin %>%
+            count(document, sentimento) %>%
+            spread(sentimento, n, fill = 0) %>%
+            mutate(score = positivo - negativo) %>%
+            arrange(desc(score)),20)['document']
+twdf %>% filter(id %in% as.vector(top8$document))
+```
