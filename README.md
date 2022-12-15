@@ -2,7 +2,7 @@
 
 - Possuo mais de 10 anos de experiência em análise de dados! Já atuei com modelagem e desenvolvimento de produtos de dados para empresas do segmento Saúde, Seguros e recentemente em uma startup no setor Financeiro. 
 
-- Formado em Gestão da Tecnologia da Informação, também possuo pós graduação em Big Data & Business Analytics e estou cursando o último ano de gradução tecnológica em Banco de Dados. 
+- Formado em Gestão da Tecnologia da Informação, pós graduado em Big Data & Business Analytics e também possuo gradução tecnológica em Banco de Dados. 
 
 ### Tecnologias e Ferramentas
 <div style="display: inline_block"><br>
